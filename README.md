@@ -1,205 +1,234 @@
-# doc2code
+doc2code
 
-> Turn structured documentation into executable pull requests.
+Turn structured documentation into executable pull requests.
 
 doc2code is a PR-native, documentation-driven development framework.
 
-Every change begins as a structured Change Request (CR) inside a versioned build document.  
+Every change begins as a structured Change Request (CR) inside a versioned build document.
 When the CR includes a valid Codex Prompt, CI automation converts that documentation into audited code changes.
-
----
-
-# Why doc2code?
-
-Traditional AI coding workflows are:
-- Chat-driven
-- Ephemeral
-- Hard to audit
-- Detached from version history
-
-doc2code makes AI execution:
-
-- PR-native
-- Version-controlled
-- Append-only documented
-- Explicitly approved
-- Fully reproducible
 
 This is governance-first AI development.
 
----
+⸻
 
-# Core Concepts
+Quick Start
+	1.	Copy scripts/ and .github/workflows/ into your project
+	2.	Add CIW_BUILD_CONSTITUTION.md from templates/
+	3.	Enable GitHub Actions write permissions
+	4.	Add an OPENAI_API_KEY repository secret
+	5.	Open a PR
+	6.	Fill the generated prompt log
+	7.	Apply label codex:run
 
-## 1. Build Constitution
+Codex executes and commits changes directly into your PR branch.
 
-Your single source of truth document:
+⸻
 
-`CIW_BUILD_CONSTITUTION.md`
+Why doc2code?
+
+Traditional AI coding workflows are:
+	•	Chat-driven
+	•	Ephemeral
+	•	Hard to audit
+	•	Detached from version history
+
+doc2code makes AI execution:
+	•	PR-native
+	•	Version-controlled
+	•	Append-only documented
+	•	Explicitly approved
+	•	Fully reproducible
+
+No silent AI edits.
+No undocumented intent.
+No merge-time surprises.
+
+⸻
+
+Core Concepts
+
+1. Build Constitution
+
+Your single source of truth:
+
+CIW_BUILD_CONSTITUTION.md
 
 It contains:
-
-- Product summary
-- Architecture summary
-- Data model overview
-- API overview
-- Append-only Change Requests (CRs)
+	•	Product summary
+	•	Architecture summary
+	•	Data model overview
+	•	API overview
+	•	Append-only Change Requests (CRs)
 
 Each PR automatically appends a new CR section.
 
----
+⸻
 
-## 2. Prompt Logs
+2. Prompt Logs
 
 For each CR:
 
-`prompt_logs/CR-YYYYMMDD-HHMM.md`
+prompt_logs/CR-YYYYMMDD-HHMM.md
 
 Required structure:
 
-## Objective
-Explain what is being changed.
+Objective
 
-## Codex Prompt v1
-```text
-Your executable instructions for Codex.
-```
+Describe what is being changed.
 
-## Notes / Decisions
+Codex Prompt v1
+
+Your executable implementation instructions.
+
+Notes / Decisions
+
 Plain markdown notes. No code fence required.
 
----
+The fenced text block is the executable spec.
 
-## 3. Guardrail
+⸻
 
-The workflow blocks merge unless:
+3. Guardrail
 
-- The Build Constitution contains a valid CR header
-- The latest prompt log contains a valid fenced ```text``` block
-- The prompt is not placeholder text
+CI blocks merge unless:
+	•	The Build Constitution contains a valid CR header
+	•	The latest prompt log contains a valid fenced text block
+	•	The prompt is not placeholder text
 
-This prevents “accidental AI execution.”
+This prevents accidental or undocumented AI execution.
 
----
+⸻
 
-## 4. Execution Trigger
+4. Execution Trigger
 
-Recommended trigger: Apply the label
+Recommended trigger: apply label
 
-`codex:run`
+codex:run
 
 When applied to a PR:
+	•	Codex runs inside GitHub Actions
+	•	Reads latest prompt log
+	•	Generates changes
+	•	Commits back into the PR branch
+	•	Posts links to execution logs
 
-- Codex runs in GitHub Actions
-- Reads latest prompt log
-- Generates changes
-- Commits back into the PR branch
-- Posts links to logs
+Execution is explicit and reviewable.
 
----
+⸻
 
-# Installation
+Installation
 
-## 1. Copy Required Files
+1. Copy Required Files
 
 Copy into your project:
+	•	scripts/
+	•	.github/workflows/
+	•	CIW_BUILD_CONSTITUTION.md (from templates/)
 
-- `scripts/`
-- `.github/workflows/`
-- `CIW_BUILD_CONSTITUTION.md` (from templates)
+Do not manually create prompt_logs/. It is created automatically.
 
-## 2. GitHub Settings
+⸻
+
+2. Enable Workflow Permissions
 
 Repository → Settings → Actions → General
 
 Enable:
+	•	Read and write permissions
 
-- Read and write permissions
+Optional:
+	•	Allow GitHub Actions to create and approve pull requests
 
-(Optional)
-- Allow GitHub Actions to create and approve PRs
+⸻
 
-## 3. Add OpenAI Secret
+3. Add OpenAI Secret
 
-Repository → Settings → Secrets → Actions
+Repository → Settings → Secrets → Actions → New repository secret
 
-Add:
+Name:
+OPENAI_API_KEY
 
-Name: OPENAI_API_KEY  
-Value: Your OpenAI API key
+Value:
+Your OpenAI API key
 
----
+Do not include quotes.
 
-# Workflow Overview
+⸻
 
-PR Opened →  
-Bootstrap Script →  
-CR Created →  
-Prompt Stub Created →  
-Bot Comment Posted →  
-You Edit Prompt →  
-Apply `codex:run` Label →  
-Codex Runs →  
-Changes Committed →  
-PR Reviewed →  
-Merge
+Workflow Overview
 
----
+PR Opened
+→ Bootstrap Script
+→ CR Created
+→ Prompt Stub Created
+→ Bot Comment Posted
+→ You Edit Prompt
+→ Apply codex:run Label
+→ Codex Executes
+→ Changes Committed
+→ PR Reviewed
+→ Merge
 
-# Fork Behavior
+Everything happens inside version control.
+
+⸻
+
+Fork Behavior
 
 GitHub does not expose secrets to fork PRs.
 
 On fork PRs:
+	•	CR + prompt stub still created
+	•	Codex will NOT auto-run
+	•	Maintainer must trigger execution manually
 
-- CR + prompt stub still created
-- Codex will NOT auto-run
-- Maintainer must run manually
+This is expected and secure.
 
----
+⸻
 
-# Example Project
+Example Project
 
 See:
 
-`examples/hello_world/`
+examples/hello_world/
 
-It demonstrates:
+Demonstrates:
+	•	Minimal build constitution
+	•	Sample CR
+	•	Valid prompt
+	•	Full workflow wiring
 
-- Minimal build constitution
-- Sample CR
-- Valid prompt
-- Full workflow wiring
+Use it as a reference implementation.
 
----
+⸻
 
-# Security Philosophy
+Security Philosophy
 
 doc2code is designed to:
+	•	Prevent silent AI changes
+	•	Force documented intent
+	•	Preserve change history
+	•	Make AI output reviewable
+	•	Eliminate “chat-only engineering”
 
-- Prevent silent AI changes
-- Force documented intent
-- Preserve change history
-- Make AI output reviewable
-- Avoid “chat-only engineering”
+AI becomes an execution layer — not an ungoverned author.
 
----
+⸻
 
-# Roadmap Ideas
+Roadmap
+	•	Multi-model support
+	•	Structured prompt schemas
+	•	Approval gating before execution
+	•	Multi-stage review (spec → diff → apply)
+	•	Self-verifying prompts
+	•	Enterprise policy packs
 
-- Multi-model support
-- Structured prompt schemas
-- Approval gating
-- Multi-stage review (spec → diff → apply)
-- Self-verifying prompts
-- Enterprise policy packs
+⸻
 
----
-
-# License
+License
 
 MIT
 
----
+⸻
 
-Created 2026-03-01.
+Created 2026-03-01

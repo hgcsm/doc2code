@@ -1,0 +1,52 @@
+name: doc2code PR Bootstrap + Prompt Required
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR head (writeable branch)
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bootstrap CR + prompt stub + PR comment
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/doc2code_pr_bootstrap.py
+
+  prompt_required:
+    runs-on: ubuntu-latest
+    needs: bootstrap
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Prompt v1 required
+        run: |
+          python scripts/doc2code_prompt_guard.py

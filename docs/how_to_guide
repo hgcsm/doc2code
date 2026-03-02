@@ -1,0 +1,141 @@
+# doc2code --- How to Use This Framework
+
+doc2code is a governance-first, PR-native development framework.
+
+Every meaningful change begins as documentation. AI execution happens
+only after documented intent and explicit approval.
+
+------------------------------------------------------------------------
+
+# Overview
+
+doc2code enforces a structured loop:
+
+1.  Update BUILD_CONSTITUTION.md (append-only change request)
+2.  Fill the generated prompt log
+3.  Apply the `codex:run` label
+4.  Review AI-generated changes
+5.  Merge when approved
+
+AI executes. Humans govern.
+
+------------------------------------------------------------------------
+
+# Repository Structure
+
+A properly installed doc2code repository contains:
+
+-   `.github/workflows/`
+-   `scripts/`
+-   `BUILD_CONSTITUTION.md`
+-   `prompt_logs/` (created automatically)
+-   `README.md`
+
+`BUILD_CONSTITUTION.md` is the single source of truth.
+
+------------------------------------------------------------------------
+
+# Installation (For New Projects)
+
+1.  Click **Use this template** on the doc2code repository.
+2.  Name your new project repository.
+3.  Go to Settings → Actions → General.
+    -   Enable: Read and write permissions.
+4.  Add repository secret:
+    -   Name: OPENAI_API_KEY
+    -   Value: Your OpenAI API key
+5.  Create a label:
+    -   Name: codex:run
+
+Your project is now governance-enabled.
+
+------------------------------------------------------------------------
+
+# First Run (Bootstrap Cycle)
+
+1.  Edit any file (for example README.md).
+2.  Choose: "Create new branch and open a pull request."
+3.  The bootstrap workflow will:
+    -   Append a CR entry to BUILD_CONSTITUTION.md
+    -   Create prompt_logs/CR-YYYYMMDD-HHMM.md
+    -   Post a bot comment linking the prompt log
+4.  Open the prompt log and fill:
+
+## Objective
+
+Describe what this change accomplishes.
+
+## Codex Prompt v1
+
+``` text
+Your executable AI instructions go here.
+```
+
+5.  Commit the prompt log update.
+6.  Apply label: `codex:run`
+
+Codex will: - Read the prompt - Generate changes - Commit back into the
+PR - Post a log link
+
+Review the diff before merging.
+
+------------------------------------------------------------------------
+
+# Development Pattern
+
+Every feature follows this loop:
+
+1.  Update BUILD_CONSTITUTION.md (append-only CR)
+2.  Fill prompt log
+3.  Apply label
+4.  Review AI output
+5.  Merge
+
+No undocumented changes. No silent AI edits. Everything traceable.
+
+------------------------------------------------------------------------
+
+# Governance Principles
+
+-   BUILD_CONSTITUTION.md is append-only.
+-   AI output must originate from a documented prompt.
+-   All AI execution occurs inside a pull request.
+-   Code is never changed without a corresponding CR.
+
+------------------------------------------------------------------------
+
+# Recommended Conventions
+
+-   Keep BUILD_CONSTITUTION.md generic.
+-   Do not duplicate constitution files in /templates.
+-   Do not manually edit AI-generated commits without a new CR.
+-   Keep prompts explicit and deterministic.
+
+------------------------------------------------------------------------
+
+# When Codex Fails
+
+Common causes:
+
+-   Missing BUILD_CONSTITUTION.md
+-   No CR header appended
+-   Missing prompt_logs/CR-\*.md
+-   Empty or placeholder prompt block
+-   Missing OPENAI_API_KEY secret
+
+The framework is working correctly when it blocks incomplete intent.
+
+------------------------------------------------------------------------
+
+# Philosophy
+
+doc2code is not chat-driven development.
+
+It is:
+
+-   Documentation-driven
+-   Review-first
+-   Governance-enforced
+-   PR-native
+
+AI is an execution engine. Documentation is the authority.

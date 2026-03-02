@@ -1,161 +1,206 @@
-# Starting CityIWant with doc2code
-test
+# doc2code
 
-This guide explains how to launch the CityIWant project using the
-governance-first doc2code framework.
+> Governance‑first AI execution for serious software projects.
 
-------------------------------------------------------------------------
+doc2code is a documentation‑driven, PR‑native AI development framework.
 
-# 1. Create the CityIWant Repository
-
-1.  Go to GitHub.
-2.  Click **New repository**.
-3.  Choose **Use a template** → Select `doc2code`.
-4.  Name the repo: `cityiwant` (or `CityIWant`).
-5.  Create the repository.
-
-This ensures all workflows, scripts, and governance rules are already
-installed.
+It turns structured change requests into audited pull requests --- with
+explicit approval, full version history, and zero silent AI edits.
 
 ------------------------------------------------------------------------
 
-# 2. Define the CityIWant Build Constitution
+# What Is doc2code?
 
-Open:
+doc2code is:
 
-CIW_BUILD_CONSTITUTION.md
+• An AI Governance Framework\
+• A Documentation‑Driven Development Engine\
+• A PR‑Native AI Execution System
 
-Replace the product summary section with something like:
+All in one.
 
-## 1) Product Summary
+Instead of chat‑driven, ephemeral AI coding, doc2code enforces:
 
-CityIWant is a real-time civic intelligence platform that visualizes
-zoning, permits, elections, development proposals, and projected urban
-change to help citizens and investors understand how cities evolve.
+1.  Document intent
+2.  Append a formal Change Request (CR)
+3.  Provide an executable prompt
+4.  Trigger execution inside a pull request
+5.  Review the diff before merge
 
-## 2) Architecture Summary
-
--   Backend: FastAPI
--   Database: PostgreSQL
--   Frontend: HTMX + TailwindCSS
--   Hosting: TBD
--   AI layer: doc2code governance-driven execution
-
-Commit this directly to main.
+AI executes.\
+Humans govern.
 
 ------------------------------------------------------------------------
 
-# 3. Open Your First PR
+# The Problem
 
-Create a small edit in the repo (e.g., update README).
+Most AI coding workflows today are:
 
-Choose: "Create a new branch and open a pull request"
+-   Chat‑based
+-   Detached from version control
+-   Hard to audit
+-   Easy to misuse
+-   Impossible to govern at scale
 
-This triggers:
+There is no institutional memory. There is no structured intent. There
+is no enforcement layer.
 
--   CR auto-creation
--   Prompt log stub creation
--   Governance bot comment
-
-------------------------------------------------------------------------
-
-# 4. Fill the Prompt Log
-
-Open the generated file:
-
-prompt_logs/CR-YYYYMMDD-HHMM.md
-
-Example first Objective:
-
-## Objective
-
-Initialize the CityIWant backend project structure.
-
-Example Prompt:
-
-## Codex Prompt v1
-
-``` text
-Create a FastAPI project structure:
-
-- app/
-    - main.py
-    - routers/
-    - models/
-    - services/
-
-Include a basic root endpoint returning:
-{ "status": "CityIWant API running" }
-
-Add requirements.txt with fastapi and uvicorn.
-```
-
-\`\`\`
-
-Save the file.
+doc2code fixes that.
 
 ------------------------------------------------------------------------
 
-# 5. Trigger Execution
+# The Core Loop
 
-Apply the label:
+PR Opened\
+↓\
+CR Auto‑Appended to Build Constitution\
+↓\
+Prompt Log Created\
+↓\
+Developer Fills Prompt\
+↓\
+Apply `codex:run` Label\
+↓\
+AI Executes Inside PR\
+↓\
+Human Reviews Diff\
+↓\
+Merge
 
-codex:run
-
-Codex will:
-
--   Read the prompt
--   Generate the structure
--   Commit to the PR
--   Post logs
-
-Review the diff. Merge when satisfied.
-
-------------------------------------------------------------------------
-
-# 6. Development Pattern Going Forward
-
-Every feature follows this loop:
-
-1.  Update Build Constitution (append-only CR)
-2.  Fill prompt log
-3.  Apply label
-4.  Review AI output
-5.  Merge
-
-This keeps CityIWant:
-
--   Structured
--   Auditable
--   Intent-driven
--   Governed
+Every AI change originates from documented intent.
 
 ------------------------------------------------------------------------
 
-# 7. Suggested First Milestones
+# Core Concepts
 
-Phase 1: - FastAPI scaffold - Database schema - Permit ingestion
-endpoint - Basic dashboard page
+## 1. Build Constitution
 
-Phase 2: - Zoning map integration - Civic voting history aggregation -
-Predictive model stub
+`BUILD_CONSTITUTION.md`
 
-Phase 3: - Public interface - Investor dashboard - City comparison
-engine
+The single source of truth.
+
+It defines:
+
+-   Product scope
+-   Architecture
+-   Data model
+-   API surface
+-   Append‑only Change Requests (CRs)
+
+Nothing meaningful changes without a CR.
+
+------------------------------------------------------------------------
+
+## 2. Prompt Logs
+
+For each CR:
+
+`prompt_logs/CR-YYYYMMDD-HHMM.md`
+
+Each prompt log contains:
+
+-   Objective
+-   Codex Prompt v1 (fenced text block)
+-   Notes / Decisions
+
+The guardrail workflow blocks execution unless this structure is valid.
+
+------------------------------------------------------------------------
+
+## 3. Guardrails
+
+doc2code refuses to run if:
+
+-   No CR exists
+-   No prompt log exists
+-   Prompt block is missing
+-   Prompt is placeholder text
+
+This prevents accidental AI execution.
+
+------------------------------------------------------------------------
+
+## 4. Execution Trigger
+
+Apply label:
+
+`codex:run`
+
+The runner will:
+
+-   Read the latest prompt log
+-   Execute against the repository
+-   Commit changes to the PR branch
+-   Post logs for review
+
+Everything happens inside a pull request.
+
+------------------------------------------------------------------------
+
+# Quick Start
+
+1.  Click Use this template
+2.  Enable GitHub Actions write permissions
+3.  Add repository secret: OPENAI_API_KEY
+4.  Create label: codex:run
+5.  Open a pull request to begin
+
+The bootstrap workflow handles the rest.
+
+------------------------------------------------------------------------
+
+# Why doc2code Is Different
+
+Traditional AI Coding vs doc2code
+
+Chat-based → PR-native\
+Ephemeral → Versioned\
+Hard to audit → Append-only CRs\
+Implicit intent → Explicit governance\
+Silent execution → Guardrail enforced
+
+doc2code is built for teams, not demos.
+
+------------------------------------------------------------------------
+
+# Intended Use Cases
+
+-   Startups building with AI from day one
+-   Open source projects that want AI contributions safely
+-   Enterprise teams needing governance
+-   Regulated environments requiring audit trails
+-   Long-lived infrastructure projects
 
 ------------------------------------------------------------------------
 
 # Philosophy
 
-CityIWant should not be built through ad-hoc AI prompts.
+AI should not replace process.
 
-It should be built through documented, reviewable, append-only change
-requests.
+AI should operate inside process.
 
-AI executes.
+Intent should be documented. Execution should be reviewable. History
+should be preserved.
 
-Humans govern.
+doc2code enforces that discipline.
 
 ------------------------------------------------------------------------
 
-End of guide.
+# Roadmap
+
+-   Multi-model support
+-   Structured prompt schemas
+-   Approval gating layers
+-   Enterprise policy packs
+-   Model comparison execution
+-   Self-verifying prompts
+
+------------------------------------------------------------------------
+
+# License
+
+MIT
+
+------------------------------------------------------------------------
+
+Created 2026.

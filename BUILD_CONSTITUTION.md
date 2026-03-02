@@ -1,6 +1,6 @@
 # Build Constitution (Append-only Change Log)
 
-**Current canonical version:** v0.1.0
+**Current canonical version:** v0.1.1
 
 This document is the single source of truth for what the product is and how it should behave.
 Changes to product behavior should be introduced as **Change Requests (CRs)** appended below.
@@ -18,3 +18,14 @@ High-level data concepts.
 High-level endpoints.
 
 ## 10) Change Requests (Append Only)
+
+## CR-20260302-1857 (Auto-generated)
+- Timestamp: 2026-03-02 18:57
+- Reason: PR bootstrap created CR + prompt stub
+- Scope (what changes): TBD
+- DB impact (Y/N): TBD
+- API impact (Y/N): TBD
+- Migration required (Y/N): TBD
+- Backwards compatible (Y/N): TBD
+- Acceptance tests: TBD
+- Prompt log: prompt_logs/CR-20260302-1857.md

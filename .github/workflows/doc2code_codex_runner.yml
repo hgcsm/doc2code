@@ -81,11 +81,27 @@ jobs:
         id: prompt
         shell: bash
         run: |
-          LATEST_PROMPT="$(ls -1t prompt_logs/CR-*.md | head -n 1)"
-          if [ -z "$LATEST_PROMPT" ]; then
-            echo "ERROR: No prompt logs found in prompt_logs/CR-*.md"
+          set -euo pipefail
+
+          if [ ! -d "prompt_logs" ]; then
+            echo "ERROR: prompt_logs/ does not exist yet."
+            echo "Open a PR so the bootstrap workflow can create:"
+            echo "  - a CR entry in BUILD_CONSTITUTION.md"
+            echo "  - prompt_logs/CR-YYYYMMDD-HHMM.md"
             exit 2
           fi
+
+          shopt -s nullglob
+          files=(prompt_logs/CR-*.md)
+          shopt -u nullglob
+
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "ERROR: No prompt logs found (expected prompt_logs/CR-YYYYMMDD-HHMM.md)."
+            echo "Open a PR (or run bootstrap) to generate one."
+            exit 2
+          fi
+
+          LATEST_PROMPT="$(ls -1t prompt_logs/CR-*.md | head -n 1)"
           echo "latest=$LATEST_PROMPT" >> "$GITHUB_OUTPUT"
 
       - name: "Comment: Codex Started (with logs link)"

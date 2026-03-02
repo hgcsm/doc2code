@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-BUILD_DOC = Path("CIW_BUILD_CONSTITUTION.md")
+BUILD_DOC = Path("BUILD_CONSTITUTION.md")
 PROMPT_DIR = Path("prompt_logs")
 RUN_LABEL = "codex:run"
 

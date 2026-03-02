@@ -88,7 +88,7 @@ jobs:
           fi
           echo "latest=$LATEST_PROMPT" >> "$GITHUB_OUTPUT"
 
-      - name: Comment: Codex Started (with logs link)
+      - name: "Comment: Codex Started (with logs link)"
         if: ${{ steps.pr.outputs.number != '' }}
         uses: actions/github-script@v7
         with:

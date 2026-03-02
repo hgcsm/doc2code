@@ -31,39 +31,19 @@ jobs:
       (github.event_name == 'workflow_dispatch')
 
     steps:
-      - name: Resolve PR number (and PR head ref)
+      - name: Resolve PR number
         id: pr
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const eventName = context.eventName;
-
-            // Determine PR number
-            let prNumber = "";
-            if (eventName === "issue_comment") {
-              prNumber = String(context.payload.issue.number || "");
-            } else if (eventName === "pull_request") {
-              prNumber = String(context.payload.pull_request.number || "");
-            } else if (eventName === "workflow_dispatch") {
-              prNumber = String(core.getInput("pr_number") || "");
-            }
-
-            // If no PR number, we still allow workflow_dispatch to run on current branch
-            core.setOutput("number", prNumber);
-
-            // If we have a PR number, fetch PR details (head ref + sha)
-            if (prNumber) {
-              const pr = await github.rest.pulls.get({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: Number(prNumber),
-              });
-              core.setOutput("head_ref", pr.data.head.ref);
-              core.setOutput("head_sha", pr.data.head.sha);
-            } else {
-              core.setOutput("head_ref", "");
-              core.setOutput("head_sha", "");
-            }
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "issue_comment" ]; then
+            echo "number=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.pr_number }}" ]; then
+            echo "number=${{ inputs.pr_number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "number=" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Checkout PR head
         if: ${{ steps.pr.outputs.number != '' }}
@@ -84,6 +64,7 @@ jobs:
           python-version: "3.12"
 
       - name: Validate prompt log
+        shell: bash
         run: |
           python scripts/doc2code_prompt_guard.py
 
@@ -93,6 +74,7 @@ jobs:
           node-version: "20"
 
       - name: Install Codex CLI
+        shell: bash
         run: |
           npm install -g @openai/codex@0.106.0
           codex --version
@@ -117,87 +99,71 @@ jobs:
 
           if [ ${#files[@]} -eq 0 ]; then
             echo "ERROR: No prompt logs found (expected prompt_logs/CR-YYYYMMDD-HHMM.md)."
-            echo "Open a PR (or run bootstrap) to generate one."
             exit 2
           fi
 
           LATEST_PROMPT="$(ls -1t prompt_logs/CR-*.md | head -n 1)"
           echo "latest=$LATEST_PROMPT" >> "$GITHUB_OUTPUT"
 
-      - name: Upsert runner status comment (Started)
+      - name: Comment: Codex Started (with logs link)
         if: ${{ steps.pr.outputs.number != '' }}
         uses: actions/github-script@v7
         with:
           script: |
             const prNumber = Number("${{ steps.pr.outputs.number }}");
-            const marker = "<!-- DOC2CODE_CODEX_RUNNER -->";
-
             const repoUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}`;
             const runUrl  = `${repoUrl}/actions/runs/${context.runId}`;
-            const headRef = "${{ steps.pr.outputs.head_ref }}";
             const promptPath = "${{ steps.prompt.outputs.latest }}";
-            const promptView = `${repoUrl}/blob/${headRef}/${promptPath}`;
+            const branch = (context.ref || "").replace('refs/heads/','');
+            const promptView = `${repoUrl}/blob/${branch}/${promptPath}`;
 
-            const body =
-`${marker}
-🤖 **Codex Runner: STARTED**
-- Prompt log: ${promptView}
-- Run logs: ${runUrl}
-
-_Status will update here when finished._`;
-
-            // Find existing bot comment w/ marker and update it; else create.
-            const comments = await github.paginate(github.rest.issues.listComments, {
+            await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: prNumber,
-              per_page: 100,
+              body: `🤖 **Codex Runner started**\n- Prompt log: ${promptView}\n- Run logs: ${runUrl}`
             });
 
-            const existing = comments.find(c => (c.body || "").includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: prNumber,
-                body,
-              });
-            }
+      - name: Debug OpenAI key presence (safe)
+        shell: bash
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OPENAI_API_KEY:-}" ]; then
+            echo "OPENAI_API_KEY is EMPTY in this step."
+            echo "Most likely: secrets are not available in this run context (fork PR / restricted)."
+            exit 2
+          fi
+          echo "OPENAI_API_KEY length: ${#OPENAI_API_KEY}"
+          echo "OPENAI_API_KEY prefix: ${OPENAI_API_KEY:0:3}***"
+          echo "GitHub event: $GITHUB_EVENT_NAME"
+          echo "Actor: $GITHUB_ACTOR"
 
       - name: Run Codex from latest prompt log
         if: ${{ steps.prompt.outputs.latest != '' }}
+        shell: bash
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        shell: bash
         run: |
           set -euo pipefail
 
           if [ -z "${OPENAI_API_KEY:-}" ]; then
-            echo "ERROR: OPENAI_API_KEY secret missing."
+            echo "ERROR: OPENAI_API_KEY secret missing (empty at runtime)."
             exit 2
           fi
 
           LATEST_PROMPT="${{ steps.prompt.outputs.latest }}"
           echo "Using prompt log: $LATEST_PROMPT"
-
           PROMPT_CONTENT="$(cat "$LATEST_PROMPT")"
 
-          export OPENAI_API_KEY="${OPENAI_API_KEY}"
-
-          codex exec "$PROMPT_CONTENT"
+          # Force the env var into the codex process
+          OPENAI_API_KEY="$OPENAI_API_KEY" codex exec "$PROMPT_CONTENT"
 
       - name: Commit and push changes (if any)
         shell: bash
         run: |
           set -euo pipefail
-
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
 
@@ -209,7 +175,7 @@ _Status will update here when finished._`;
             echo "No changes to commit."
           fi
 
-      - name: Upsert runner status comment (Finished)
+      - name: Comment: Codex Finished (with logs link)
         if: ${{ always() && steps.pr.outputs.number != '' }}
         uses: actions/github-script@v7
         with:
@@ -217,40 +183,12 @@ _Status will update here when finished._`;
             const prNumber = Number("${{ steps.pr.outputs.number }}");
             const status = "${{ job.status }}";
             const emoji = status === "success" ? "✅" : "❌";
-            const marker = "<!-- DOC2CODE_CODEX_RUNNER -->";
-
             const repoUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}`;
             const runUrl  = `${repoUrl}/actions/runs/${context.runId}`;
-            const headRef = "${{ steps.pr.outputs.head_ref }}";
-            const promptPath = "${{ steps.prompt.outputs.latest }}";
-            const promptView = promptPath ? `${repoUrl}/blob/${headRef}/${promptPath}` : "(prompt not found)";
 
-            const body =
-`${marker}
-${emoji} **Codex Runner: FINISHED** — **${status.toUpperCase()}**
-- Prompt log: ${promptView}
-- Run logs: ${runUrl}`;
-
-            const comments = await github.paginate(github.rest.issues.listComments, {
+            await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: prNumber,
-              per_page: 100,
+              body: `${emoji} **Codex Runner finished:** **${status}**\n\n🔎 Logs: ${runUrl}`
             });
-
-            const existing = comments.find(c => (c.body || "").includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: prNumber,
-                body,
-              });
-            }

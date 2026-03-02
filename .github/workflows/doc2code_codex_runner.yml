@@ -124,6 +124,7 @@ jobs:
             });
 
       - name: Run Codex from latest prompt log
+        if: ${{ steps.prompt.outputs.latest != '' }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         shell: bash

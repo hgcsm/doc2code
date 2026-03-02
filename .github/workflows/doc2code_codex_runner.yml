@@ -105,7 +105,7 @@ jobs:
           LATEST_PROMPT="$(ls -1t prompt_logs/CR-*.md | head -n 1)"
           echo "latest=$LATEST_PROMPT" >> "$GITHUB_OUTPUT"
 
-      - name: Comment: Codex Started (with logs link)
+      - name: "Comment: Codex Started (with logs link)"
         if: ${{ steps.pr.outputs.number != '' }}
         uses: actions/github-script@v7
         with:
@@ -175,7 +175,7 @@ jobs:
             echo "No changes to commit."
           fi
 
-      - name: Comment: Codex Finished (with logs link)
+      - name: "Comment: Codex Finished (with logs link)"
         if: ${{ always() && steps.pr.outputs.number != '' }}
         uses: actions/github-script@v7
         with:

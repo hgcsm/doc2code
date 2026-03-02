@@ -14,10 +14,6 @@ PROMPT_DIR = Path("prompt_logs")
 
 VERSION_RE = re.compile(r"(\*\*Current canonical version:\*\*\s*)(v\d+\.\d+\.\d+)")
 CR_HEADER_RE = re.compile(r"^##\s+(CR-\d{8}-\d{4})\b", re.MULTILINE)
-PROMPT_BLOCK_RE = re.compile(
-    r"^##\s+Codex Prompt v1\s*\n```text\s*\n([\s\S]*?)\n```",
-    re.MULTILINE,
-)
 
 BOT_MARKER = "<!-- DOC2CODE_BOT -->"
 
@@ -56,11 +52,14 @@ def ensure_prompt_dir() -> None:
 
 
 def write_prompt_stub(cr_id: str) -> Path:
+    """Create prompt_logs/<CR-ID>.md if missing."""
     ensure_prompt_dir()
     p = PROMPT_DIR / f"{cr_id}.md"
     if p.exists():
         return p
 
+    # NOTE: We deliberately keep this section inside the Prompt v1 code fence so the
+    # AI sees it as instructions to follow (not just human guidance).
     lines = [
         f"# {cr_id} Prompt Log",
         "",
@@ -69,19 +68,18 @@ def write_prompt_stub(cr_id: str) -> Path:
         "",
         "## Codex Prompt v1",
         "```text",
-        "------",
         "Write the executable Codex instructions below.",
-        "Be specific about files to create/edit and acceptance checks.",
-        "------",
         "",
-        "If this change modifies data models, database schema, API endpoints,",
-        "or architecture decisions:",
-        "- Update the corresponding Current State sections in BUILD_CONSTITUTION.md",
-        "  so they reflect the post-change system state.",
+        "Rules:",
+        "- Be specific about which files to create/edit and acceptance checks.",
+        "- If this change modifies data models, database schema, API endpoints, or architecture decisions,",
+        "  THEN update the corresponding Current State sections in BUILD_CONSTITUTION.md so they reflect",
+        "  the post-change system state.",
         "- Do NOT edit prior CR entries (append-only history).",
+        "- If nothing in BUILD_CONSTITUTION.md needs updating for this change, explicitly include the line:",
+        "  Constitution update: not needed",
         "",
-        "If nothing in BUILD_CONSTITUTION.md needs updating for this change,",
-        'explicitly state: "Constitution update: not needed".',
+        "PASTE INITIAL PROMPT HERE",
         "```",
         "",
         "## Notes / Decisions",
@@ -93,6 +91,7 @@ def write_prompt_stub(cr_id: str) -> Path:
 
 
 def append_cr_if_missing() -> str:
+    """Append the first CR header if none exist yet."""
     text = BUILD_DOC.read_text(encoding="utf-8")
     cr_ids = CR_HEADER_RE.findall(text)
     if cr_ids:
@@ -227,6 +226,7 @@ def main() -> int:
                 f"1. Edit the prompt log: {edit_url}",
                 "2. Fill Objective + Codex Prompt v1 (replace placeholders)",
                 "3. 🚀 Run Codex by adding the comment: **/codex run**",
+                "4. Optional (iterate): comment **/codex next** to generate Prompt v2, then edit it and run again.",
                 "",
                 f"Prompt log (view): {view_url}",
             ]

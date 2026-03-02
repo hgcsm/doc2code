@@ -154,7 +154,7 @@ jobs:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           prompt-file: ${{ steps.prompt.outputs.latest }}
           model: gpt-5.3-codex
-          sandbox: read-only
+          sandbox: workspace-write
 
       - name: Commit and push changes (if any)
         shell: bash

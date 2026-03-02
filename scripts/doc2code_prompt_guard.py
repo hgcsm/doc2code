@@ -1,43 +1,44 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 
-BUILD_DOC = Path("BUILD_CONSTITUTION.md")  # keep generic
+BUILD_DOC = Path("BUILD_CONSTITUTION.md")
 PROMPT_DIR = Path("prompt_logs")
 
 CR_HEADER_RE = re.compile(r"^##\s+(CR-\d{8}-\d{4})\b", re.MULTILINE)
 
+# Accept v1/v2/etc but require a fenced text block under the matching header.
 PROMPT_BLOCK_RE = re.compile(
-    r"^##\s+Codex Prompt v1\s*\n```text\s*\n([\s\S]*?)\n```",
-    re.MULTILINE,
+    r"^##\s+Codex Prompt v\d+\s*\n```text\s*\n([\s\S]*?)\n```",
+    re.MULTILINE
 )
 
+VFILE_RE = re.compile(r"^prompt_v(\d+)\.md$")
 
 def fail(msg: str) -> int:
     print(f"DOC2CODE Prompt Guard FAIL: {msg}")
     return 2
 
+def latest_prompt_file_for_cr(cr_id: str) -> Path | None:
+    # Preferred layout: prompt_logs/<CR-ID>/prompt_vN.md (pick highest N)
+    folder = PROMPT_DIR / cr_id
+    if folder.exists() and folder.is_dir():
+        versions = []
+        for p in folder.iterdir():
+            m = VFILE_RE.match(p.name)
+            if m and p.is_file():
+                versions.append((int(m.group(1)), p))
+        if versions:
+            return sorted(versions, key=lambda t: t[0])[-1][1]
 
-def is_pr_context() -> bool:
-    """
-    We only require CR + prompt log in PR-related contexts.
-    - pull_request workflows
-    - issue_comment workflows when the comment is on a PR
-    """
-    event_name = os.environ.get("GITHUB_EVENT_NAME", "").strip().lower()
-    if event_name == "pull_request":
-        return True
+    # Legacy: prompt_logs/<CR-ID>.md
+    legacy = PROMPT_DIR / f"{cr_id}.md"
+    if legacy.exists():
+        return legacy
 
-    if event_name == "issue_comment":
-        # In your workflows, issue_comment is only supposed to trigger on PR comments,
-        # but GitHub's payload check happens in YAML. We still treat issue_comment as PR context.
-        return True
-
-    return False
-
+    return None
 
 def main() -> int:
     if not BUILD_DOC.exists():
@@ -45,45 +46,26 @@ def main() -> int:
 
     build_text = BUILD_DOC.read_text(encoding="utf-8")
     cr_ids = CR_HEADER_RE.findall(build_text)
-
-    # Template/main branch should be allowed to have zero CRs.
     if not cr_ids:
-        if is_pr_context():
-            return fail(
-                "No CR headers found in build doc (expected lines like: '## CR-YYYYMMDD-HHMM'). "
-                "This should have been auto-appended by the PR bootstrap workflow."
-            )
-        print("DOC2CODE Prompt Guard OK (no CRs yet; allowed outside PR context)")
-        return 0
+        return fail("No CR headers found in build doc (expected lines like: '## CR-YYYYMMDD-HHMM').")
 
     latest_cr = cr_ids[-1]
-    prompt_path = PROMPT_DIR / f"{latest_cr}.md"
 
-    # Prompt logs are only mandatory in PR context. Outside PR context, pass.
-    if not prompt_path.exists():
-        if is_pr_context():
-            return fail(f"Missing prompt log for latest CR: {prompt_path}")
-        print("DOC2CODE Prompt Guard OK (prompt log missing; allowed outside PR context)")
-        return 0
+    prompt_path = latest_prompt_file_for_cr(latest_cr)
+    if not prompt_path:
+        return fail(f"Missing prompt log for latest CR: expected {PROMPT_DIR}/{latest_cr}.md or {PROMPT_DIR}/{latest_cr}/prompt_v*.md")
 
     prompt_text = prompt_path.read_text(encoding="utf-8")
     m = PROMPT_BLOCK_RE.search(prompt_text)
     if not m:
-        if is_pr_context():
-            return fail("Missing Codex Prompt v1 fenced ```text``` block under '## Codex Prompt v1'.")
-        print("DOC2CODE Prompt Guard OK (prompt block missing; allowed outside PR context)")
-        return 0
+        return fail("Missing Codex Prompt fenced ```text``` block under a '## Codex Prompt vN' header.")
 
     content = (m.group(1) or "").strip()
-    if not content or content.upper().startswith("PASTE INITIAL PROMPT HERE"):
-        if is_pr_context():
-            return fail("Codex Prompt v1 block is empty or still placeholder text.")
-        print("DOC2CODE Prompt Guard OK (placeholder prompt; allowed outside PR context)")
-        return 0
+    if not content or content.upper().startswith("PASTE"):
+        return fail("Codex Prompt block is empty or still placeholder text.")
 
-    print("DOC2CODE Prompt Guard OK")
+    print(f"DOC2CODE Prompt Guard OK (CR={latest_cr}, prompt={prompt_path.as_posix()})")
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

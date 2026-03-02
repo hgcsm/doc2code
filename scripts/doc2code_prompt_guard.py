@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-BUILD_DOC = Path("CIW_BUILD_CONSTITUTION.md")  # rename if desired
+BUILD_DOC = Path("BUILD_CONSTITUTION.md")  # rename if desired
 PROMPT_DIR = Path("prompt_logs")
 
 CR_HEADER_RE = re.compile(r"^##\s+(CR-\d{8}-\d{4})\b", re.MULTILINE)

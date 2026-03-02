@@ -44,11 +44,29 @@ jobs:
             echo "number=" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Checkout PR head
+      - name: Fetch PR metadata (head branch)
+        id: prmeta
+        if: ${{ steps.pr.outputs.number != '' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = Number("${{ steps.pr.outputs.number }}");
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+
+            core.setOutput("head_ref", pr.head.ref);
+            core.setOutput("head_sha", pr.head.sha);
+            core.setOutput("head_repo_full_name", pr.head.repo.full_name);
+
+      - name: Checkout PR head branch (NOT detached)
         if: ${{ steps.pr.outputs.number != '' }}
         uses: actions/checkout@v5
         with:
-          ref: refs/pull/${{ steps.pr.outputs.number }}/head
+          repository: ${{ steps.prmeta.outputs.head_repo_full_name }}
+          ref: ${{ steps.prmeta.outputs.head_ref }}
           fetch-depth: 0
 
       - name: Checkout current branch (workflow_dispatch fallback)
@@ -113,7 +131,7 @@ jobs:
             const repoUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}`;
             const runUrl  = `${repoUrl}/actions/runs/${context.runId}`;
             const promptPath = "${{ steps.prompt.outputs.latest }}";
-            const branch = (context.ref || "").replace("refs/heads/","");
+            const branch = "${{ steps.prmeta.outputs.head_ref }}";
             const promptView = `${repoUrl}/blob/${branch}/${promptPath}`;
 
             const body = [
@@ -156,7 +174,24 @@ jobs:
           model: gpt-5.3-codex
           sandbox: workspace-write
 
-      - name: Commit and push changes (if any)
+      - name: Commit and push changes (if any) to PR branch
+        if: ${{ steps.pr.outputs.number != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+
+          if git status --porcelain | grep -q .; then
+            git add -A
+            git commit -m "chore(doc2code): codex changes"
+            git push origin "HEAD:${{ steps.prmeta.outputs.head_ref }}"
+          else
+            echo "No changes to commit."
+          fi
+
+      - name: Commit and push changes (if any) (workflow_dispatch fallback)
+        if: ${{ steps.pr.outputs.number == '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -183,7 +218,7 @@ jobs:
             const repoUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}`;
             const runUrl  = `${repoUrl}/actions/runs/${context.runId}`;
             const promptPath = "${{ steps.prompt.outputs.latest }}";
-            const branch = (context.ref || "").replace("refs/heads/","");
+            const branch = "${{ steps.prmeta.outputs.head_ref }}";
             const promptView = `${repoUrl}/blob/${branch}/${promptPath}`;
 
             const body = [

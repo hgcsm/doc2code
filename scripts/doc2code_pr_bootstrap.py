@@ -11,16 +11,16 @@ from typing import Any
 
 BUILD_DOC = Path("BUILD_CONSTITUTION.md")
 PROMPT_DIR = Path("prompt_logs")
-RUN_LABEL = "codex:run"
 
 VERSION_RE = re.compile(r"(\*\*Current canonical version:\*\*\s*)(v\d+\.\d+\.\d+)")
 CR_HEADER_RE = re.compile(r"^##\s+(CR-\d{8}-\d{4})\b", re.MULTILINE)
 PROMPT_BLOCK_RE = re.compile(
     r"^##\s+Codex Prompt v1\s*\n```text\s*\n([\s\S]*?)\n```",
-    re.MULTILINE
+    re.MULTILINE,
 )
 
 BOT_MARKER = "<!-- DOC2CODE_BOT -->"
+
 
 def run(cmd: list[str]) -> str:
     p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -28,14 +28,17 @@ def run(cmd: list[str]) -> str:
         raise RuntimeError(f"Command failed: {' '.join(cmd)}\n{p.stderr}")
     return p.stdout.strip()
 
+
 def bump_patch(ver: str) -> str:
     v = ver.lstrip("v")
     major, minor, patch = map(int, v.split("."))
-    return f"v{major}.{minor}.{patch+1}"
+    return f"v{major}.{minor}.{patch + 1}"
+
 
 def ensure_build_doc_exists() -> None:
     if not BUILD_DOC.exists():
         raise SystemExit(f"Missing {BUILD_DOC} at repo root.")
+
 
 def parse_version(text: str) -> tuple[str, str]:
     m = VERSION_RE.search(text)
@@ -43,17 +46,21 @@ def parse_version(text: str) -> tuple[str, str]:
         raise SystemExit("Build doc missing canonical version line: **Current canonical version:** vX.Y.Z")
     return m.group(1), m.group(2)
 
+
 def create_cr_id() -> str:
     return "CR-" + dt.datetime.now().strftime("%Y%m%d-%H%M")
 
+
 def ensure_prompt_dir() -> None:
     PROMPT_DIR.mkdir(parents=True, exist_ok=True)
+
 
 def write_prompt_stub(cr_id: str) -> Path:
     ensure_prompt_dir()
     p = PROMPT_DIR / f"{cr_id}.md"
     if p.exists():
         return p
+
     lines = [
         f"# {cr_id} Prompt Log",
         "",
@@ -72,13 +79,14 @@ def write_prompt_stub(cr_id: str) -> Path:
     p.write_text("\n".join(lines), encoding="utf-8")
     return p
 
+
 def append_cr_if_missing() -> str:
     text = BUILD_DOC.read_text(encoding="utf-8")
     cr_ids = CR_HEADER_RE.findall(text)
     if cr_ids:
         return cr_ids[-1]
 
-    prefix, old_ver = parse_version(text)
+    _, old_ver = parse_version(text)
     new_ver = bump_patch(old_ver)
     text = VERSION_RE.sub(rf"\1{new_ver}", text, count=1)
 
@@ -106,8 +114,10 @@ def append_cr_if_missing() -> str:
     BUILD_DOC.write_text(text, encoding="utf-8")
     return cr_id
 
+
 def git_has_changes() -> bool:
     return run(["git", "status", "--porcelain"]) != ""
+
 
 def git_commit_push(message: str, branch: str, allow_push: bool) -> None:
     if not git_has_changes():
@@ -117,18 +127,23 @@ def git_commit_push(message: str, branch: str, allow_push: bool) -> None:
     if allow_push:
         run(["git", "push", "origin", f"HEAD:{branch}"])
 
+
 def load_event() -> dict[str, Any]:
     event_path = os.environ.get("GITHUB_EVENT_PATH")
     if not event_path:
         return {}
     return json.loads(Path(event_path).read_text(encoding="utf-8"))
 
+
 def gh_api(method: str, url: str, payload: dict | None = None) -> Any:
     token = os.environ["GITHUB_TOKEN"]
     headers = [
-        "-H", "Accept: application/vnd.github+json",
-        "-H", f"Authorization: Bearer {token}",
-        "-H", "X-GitHub-Api-Version: 2022-11-28",
+        "-H",
+        "Accept: application/vnd.github+json",
+        "-H",
+        f"Authorization: Bearer {token}",
+        "-H",
+        "X-GitHub-Api-Version: 2022-11-28",
     ]
     cmd = ["curl", "-sS", "-X", method, *headers, url]
     if payload is not None:
@@ -136,46 +151,31 @@ def gh_api(method: str, url: str, payload: dict | None = None) -> Any:
     out = run(cmd)
     return json.loads(out) if out else {}
 
-def ensure_label_exists(owner: str, repo: str) -> None:
-    url = f"https://api.github.com/repos/{owner}/{repo}/labels/{RUN_LABEL.replace(':', '%3A')}"
-    resp = gh_api("GET", url)
-    if isinstance(resp, dict) and resp.get("message") == "Not Found":
-        gh_api("POST", f"https://api.github.com/repos/{owner}/{repo}/labels", {
-            "name": RUN_LABEL,
-            "color": "5319e7",
-            "description": "Trigger doc2code Codex runner"
-        })
-
-def add_label_to_issue(owner: str, repo: str, issue_number: int, label: str) -> None:
-    gh_api("POST", f"https://api.github.com/repos/{owner}/{repo}/issues/{issue_number}/labels", {
-        "labels": [label]
-    })
 
 def upsert_bot_comment(owner: str, repo: str, pr_number: int, body: str) -> None:
     comments_url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments?per_page=100"
     comments = gh_api("GET", comments_url)
+
     existing = None
     if isinstance(comments, list):
         for c in comments:
             if isinstance(c, dict) and BOT_MARKER in (c.get("body") or ""):
                 existing = c
                 break
-    if existing and "id" in existing:
-        gh_api("PATCH", f"https://api.github.com/repos/{owner}/{repo}/issues/comments/{existing['id']}", {"body": body})
-    else:
-        gh_api("POST", f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments", {"body": body})
 
-def prompt_is_valid(prompt_path: Path) -> bool:
-    if not prompt_path.exists():
-        return False
-    text = prompt_path.read_text(encoding="utf-8")
-    m = PROMPT_BLOCK_RE.search(text)
-    if not m:
-        return False
-    content = (m.group(1) or "").strip()
-    if not content or content.upper().startswith("PASTE INITIAL PROMPT HERE"):
-        return False
-    return True
+    if existing and "id" in existing:
+        gh_api(
+            "PATCH",
+            f"https://api.github.com/repos/{owner}/{repo}/issues/comments/{existing['id']}",
+            {"body": body},
+        )
+    else:
+        gh_api(
+            "POST",
+            f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments",
+            {"body": body},
+        )
+
 
 def main() -> int:
     ensure_build_doc_exists()
@@ -190,7 +190,9 @@ def main() -> int:
     repo = repo_obj.get("name")
 
     branch = head.get("ref") or os.environ.get("GITHUB_REF_NAME") or ""
-    is_fork = bool(head.get("repo", {}).get("fork")) and (head.get("repo", {}).get("full_name") != base.get("repo", {}).get("full_name"))
+    is_fork = bool(head.get("repo", {}).get("fork")) and (
+        head.get("repo", {}).get("full_name") != base.get("repo", {}).get("full_name")
+    )
     allow_push = (not is_fork) and bool(branch)
 
     cr_id = append_cr_if_missing()
@@ -202,30 +204,23 @@ def main() -> int:
         git_commit_push(f"chore(doc2code): bootstrap {cr_id} (doc + prompt stub)", branch, allow_push)
 
     if owner and repo and pr_number:
-        ensure_label_exists(owner, repo)
-
         edit_url = f"https://github.com/{owner}/{repo}/edit/{branch}/{prompt_path.as_posix()}"
         view_url = f"https://github.com/{owner}/{repo}/blob/{branch}/{prompt_path.as_posix()}"
-        workflow_url = f"https://github.com/{owner}/{repo}/actions/workflows/doc2code_codex_runner.yml"
 
-        body = "\n".join([
-            BOT_MARKER,
-            "## 🔴 doc2code: Prompt v1 required before Codex runs",
-            "",
-            f"1) **Edit the prompt log:** {edit_url}",
-            "2) Fill **Objective** + **Codex Prompt v1** (replace placeholders)",
-            "",
-            "### 🚀 Run Codex (recommended: label)",
-            f"- Apply label **`{RUN_LABEL}`** on this PR (right sidebar → Labels).",
-            f"- Manual fallback: {workflow_url} (Run workflow → enter PR number).",
-            "",
-            f"Prompt log (view): {view_url}",
-        ])
+        body = "\n".join(
+            [
+                BOT_MARKER,
+                "## 🔴 doc2code: Prompt v1 required before Codex runs",
+                "",
+                f"1. Edit the prompt log: {edit_url}",
+                "2. Fill Objective + Codex Prompt v1 (replace placeholders)",
+                "3. 🚀 Run Codex by adding the comment: **/codex run**",
+                "",
+                f"Prompt log (view): {view_url}",
+            ]
+        )
 
         upsert_bot_comment(owner, repo, int(pr_number), body)
-
-        if allow_push and prompt_is_valid(prompt_path):
-            add_label_to_issue(owner, repo, int(pr_number), RUN_LABEL)
 
     out_path = os.environ.get("GITHUB_OUTPUT")
     if out_path:
@@ -234,6 +229,7 @@ def main() -> int:
             f.write(f"prompt_path={prompt_path.as_posix()}\n")
 
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -3,13 +3,11 @@ name: doc2code Codex Runner
 on:
   issue_comment:
     types: [created]
-  pull_request:
-    types: [labeled]
   workflow_dispatch:
     inputs:
       pr_number:
-        description: "PR number to run Codex on (optional)"
-        required: false
+        description: "PR number to run Codex on (required for manual runs)"
+        required: true
         type: string
 
 permissions:
@@ -18,61 +16,46 @@ permissions:
   issues: write
 
 concurrency:
-  group: doc2code-codex-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+  group: doc2code-codex-${{ github.event.issue.number || inputs.pr_number || github.run_id }}
   cancel-in-progress: false
 
 jobs:
-  codex:
+  run:
     runs-on: ubuntu-latest
+
+    # Triggered by:
+    # - PR comment: "/codex run"
+    # - PR comment: "/codex next"
+    # - Manual dispatch with PR number
     if: >-
-      (github.event_name == 'issue_comment' && github.event.issue.pull_request && contains(github.event.comment.body, '/codex run')) ||
-      (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'codex:run') ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+        (contains(github.event.comment.body, '/codex run') || contains(github.event.comment.body, '/codex next'))) ||
       (github.event_name == 'workflow_dispatch')
 
     steps:
-      - name: Resolve PR number
-        id: pr
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "issue_comment" ]; then
-            echo "number=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.pr_number }}" ]; then
-            echo "number=${{ inputs.pr_number }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "number=" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Fetch PR metadata (head branch)
+      - name: Resolve PR metadata (head repo + branch)
         id: prmeta
-        if: ${{ steps.pr.outputs.number != '' }}
         uses: actions/github-script@v7
         with:
           script: |
-            const prNumber = Number("${{ steps.pr.outputs.number }}");
+            const isDispatch = context.eventName === 'workflow_dispatch';
+            const prNumber = isDispatch ? Number(core.getInput('pr_number')) : context.payload.issue.number;
+
             const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: prNumber,
             });
 
-            core.setOutput("head_ref", pr.head.ref);
-            core.setOutput("head_sha", pr.head.sha);
-            core.setOutput("head_repo_full_name", pr.head.repo.full_name);
+            core.setOutput('number', String(prNumber));
+            core.setOutput('head_repo', pr.head.repo.full_name);
+            core.setOutput('head_ref', pr.head.ref);
 
-      - name: Checkout PR head branch (NOT detached)
-        if: ${{ steps.pr.outputs.number != '' }}
+      - name: Checkout PR head branch (writable)
         uses: actions/checkout@v5
         with:
-          repository: ${{ steps.prmeta.outputs.head_repo_full_name }}
+          repository: ${{ steps.prmeta.outputs.head_repo }}
           ref: ${{ steps.prmeta.outputs.head_ref }}
-          fetch-depth: 0
-
-      - name: Checkout current branch (workflow_dispatch fallback)
-        if: ${{ steps.pr.outputs.number == '' }}
-        uses: actions/checkout@v5
-        with:
           fetch-depth: 0
 
       - name: Set up Python
@@ -80,57 +63,93 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Validate prompt log (guardrails)
-        shell: bash
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Codex CLI
         run: |
-          python scripts/doc2code_prompt_guard.py
+          npm install -g @openai/codex@0.107.0
+          codex --version
 
-      - name: Determine latest prompt log file
-        id: prompt
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [ ! -d "prompt_logs" ]; then
-            echo "ERROR: prompt_logs/ does not exist yet."
-            exit 2
-          fi
-
-          shopt -s nullglob
-          files=(prompt_logs/CR-*.md)
-          shopt -u nullglob
-
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "ERROR: No prompt logs found (expected prompt_logs/CR-YYYYMMDD-HHMM.md)."
-            exit 2
-          fi
-
-          LATEST_PROMPT="$(ls -1t prompt_logs/CR-*.md | head -n 1)"
-          echo "latest=$LATEST_PROMPT" >> "$GITHUB_OUTPUT"
-          echo "Latest prompt: $LATEST_PROMPT"
-
-      - name: Debug OPENAI_API_KEY presence (prints length only)
-        shell: bash
+      - name: Debug OPENAI_API_KEY presence (length only)
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${OPENAI_API_KEY:-}" ]; then
-            echo "ERROR: OPENAI_API_KEY is empty in this workflow run."
+            echo "ERROR: OPENAI_API_KEY secret missing or empty."
             exit 2
           fi
           echo "OPENAI_API_KEY length: ${#OPENAI_API_KEY}"
 
+      - name: Detect command
+        id: cmd
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "issue_comment" ]; then
+            body="${{ github.event.comment.body }}"
+          else
+            body="/codex run"
+          fi
+
+          if echo "$body" | grep -q "/codex next"; then
+            echo "command=next" >> "$GITHUB_OUTPUT"
+          else
+            echo "command=run" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate prompt log (guardrails)
+        if: ${{ steps.cmd.outputs.command == 'run' }}
+        run: |
+          python scripts/doc2code_prompt_guard.py
+
+      - name: Find latest prompt file
+        if: ${{ steps.cmd.outputs.command == 'run' }}
+        id: prompt
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Determine latest CR from build doc
+          latest_cr="$(python -c 'import re; from pathlib import Path; text=Path("BUILD_CONSTITUTION.md").read_text(encoding="utf-8"); ids=re.findall(r"^##\s+(CR-\d{8}-\d{4})\b", text, flags=re.MULTILINE); print(ids[-1] if ids else "")')"
+          if [ -z "${latest_cr}" ]; then
+            echo "ERROR: No CR found in BUILD_CONSTITUTION.md"
+            exit 2
+          fi
+
+          # Preferred folder prompts (if you support them)
+          if [ -d "prompt_logs/${latest_cr}" ]; then
+            latest_prompt="$(ls -1 prompt_logs/${latest_cr}/prompt_v*.md 2>/dev/null | sort -V | tail -n 1 || true)"
+          else
+            latest_prompt=""
+          fi
+
+          # Legacy fallback
+          if [ -z "${latest_prompt}" ] && [ -f "prompt_logs/${latest_cr}.md" ]; then
+            latest_prompt="prompt_logs/${latest_cr}.md"
+          fi
+
+          if [ -z "${latest_prompt}" ]; then
+            echo "ERROR: No prompt file found for ${latest_cr}"
+            exit 2
+          fi
+
+          echo "latest=${latest_prompt}" >> "$GITHUB_OUTPUT"
+          echo "Latest prompt: ${latest_prompt}"
+
       - name: Upsert PR comment (started)
-        if: ${{ steps.pr.outputs.number != '' }}
+        if: ${{ steps.cmd.outputs.command == 'run' }}
         uses: actions/github-script@v7
         with:
           script: |
             const marker = "<!-- DOC2CODE_CODEX_RUNNER -->";
-            const prNumber = Number("${{ steps.pr.outputs.number }}");
+            const prNumber = Number("${{ steps.prmeta.outputs.number }}");
             const repoUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}`;
             const runUrl  = `${repoUrl}/actions/runs/${context.runId}`;
-            const promptPath = "${{ steps.prompt.outputs.latest }}";
+            const promptPath = "${{ steps.prompt.outputs.file }}";
             const branch = "${{ steps.prmeta.outputs.head_ref }}";
             const promptView = `${repoUrl}/blob/${branch}/${promptPath}`;
 
@@ -140,6 +159,8 @@ jobs:
               "",
               `- Prompt log: ${promptView}`,
               `- Run logs: ${runUrl}`,
+              "",
+              "Want another prompt iteration after this finishes? Reply: `/codex next`",
             ].join("\n");
 
             const { data: comments } = await github.rest.issues.listComments({
@@ -166,16 +187,22 @@ jobs:
               });
             }
 
-      - name: Run Codex (official action)
+      - name: Run Codex (writes to workspace)
+        if: ${{ steps.cmd.outputs.command == 'run' }}
         uses: openai/codex-action@v1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          prompt-file: ${{ steps.prompt.outputs.latest }}
+          prompt-file: ${{ steps.prompt.outputs.file }}
           model: gpt-5.3-codex
           sandbox: workspace-write
 
-      - name: Commit and push changes (if any) to PR branch
-        if: ${{ steps.pr.outputs.number != '' }}
+      - name: Create next prompt file (/codex next)
+        if: ${{ steps.cmd.outputs.command == 'next' }}
+        run: |
+          python scripts/doc2code_next_prompt.py
+
+      - name: Commit and push changes (Codex output)
+        if: ${{ steps.cmd.outputs.command == 'run' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -190,44 +217,29 @@ jobs:
             echo "No changes to commit."
           fi
 
-      - name: Commit and push changes (if any) (workflow_dispatch fallback)
-        if: ${{ steps.pr.outputs.number == '' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions"
-          git config user.email "github-actions@users.noreply.github.com"
-
-          if git status --porcelain | grep -q .; then
-            git add -A
-            git commit -m "chore(doc2code): codex changes"
-            git push
-          else
-            echo "No changes to commit."
-          fi
-
       - name: Upsert PR comment (finished)
-        if: ${{ always() && steps.pr.outputs.number != '' }}
+        if: ${{ always() }}
         uses: actions/github-script@v7
         with:
           script: |
             const marker = "<!-- DOC2CODE_CODEX_RUNNER -->";
-            const prNumber = Number("${{ steps.pr.outputs.number }}");
+            const prNumber = Number("${{ steps.prmeta.outputs.number }}");
             const status = "${{ job.status }}";
             const emoji = status === "success" ? "✅" : "❌";
             const repoUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}`;
             const runUrl  = `${repoUrl}/actions/runs/${context.runId}`;
-            const promptPath = "${{ steps.prompt.outputs.latest }}";
-            const branch = "${{ steps.prmeta.outputs.head_ref }}";
-            const promptView = `${repoUrl}/blob/${branch}/${promptPath}`;
 
             const body = [
               marker,
-              `${emoji} **Codex Runner finished**`,
+              `${emoji} **doc2code workflow finished**`,
               "",
               `- Status: **${status}**`,
-              `- Prompt log: ${promptView}`,
-              `- Run logs: ${runUrl}`,
+              `- Logs: ${runUrl}`,
+              "",
+              "Next iteration:",
+              "1) Reply: `/codex next` (creates prompt_vN.md)",
+              "2) Edit the new prompt file",
+              "3) Reply: `/codex run`",
             ].join("\n");
 
             const { data: comments } = await github.rest.issues.listComments({
